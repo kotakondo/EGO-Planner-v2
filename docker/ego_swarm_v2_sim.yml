@@ -1,0 +1,14 @@
+session_name: ego_swarm_v2
+windows:
+  - window_name: ego_swarm_v2
+    layout: tiled
+    shell_command_before:
+      - source /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/swarm-playground/main_ws/devel/setup.bash
+      - source /home/kota/livox_ros_ws/devel/setup.bash
+      - source /home/kota/mid360_ws/devel/setup.bash
+    panes:
+      - roscore
+      - roslaunch --wait acl_sim start_world.launch
+      - roslaunch --wait acl_sim perfect_tracker_and_sim.launch x:=0.0 y:=0.0 z:=3.0 yaw:=0.0
+      - roslaunch --wait ego_planner rviz.launch
+      - roslaunch --wait ego_planner single_drone_waypoints.launch simulation_number:=0
