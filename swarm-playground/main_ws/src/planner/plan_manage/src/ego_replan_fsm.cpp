@@ -21,6 +21,7 @@ namespace ego_planner
     nh.param("fsm/realworld_experiment", flag_realworld_experiment_, false);
     nh.param("fsm/fail_safe", enable_fail_safe_, true);
     nh.param("fsm/ground_height_measurement", enable_ground_height_measurement_, false);
+    nh.param("simulation_number", simulation_number_, 0);
 
     nh.param("fsm/waypoint_num", waypoint_num_, -1);
     for (int i = 0; i < waypoint_num_; i++)
@@ -78,6 +79,30 @@ namespace ego_planner
     }
     else
       cout << "Wrong target_type_ value! target_type_=" << target_type_ << endl;
+
+    // Initilize the computation time vector
+    time_replan_.clear();
+
+  }
+
+  // destructor
+  EGOReplanFSM::~EGOReplanFSM()
+  {
+    
+    std::cout << "writing computation times to csv file" << std::endl;
+    // Open (or create) a CSV file for writing (append mode)
+    std::ofstream csvFile;
+    csvFile.open("/home/kota/data/computation_times_num_" + std::to_string(simulation_number_) + ".csv", std::ios::app);
+    if (!csvFile.is_open()) {
+        std::cerr << "Error: Could not open CSV file for writing." << std::endl;
+    }
+    csvFile << "ComputationTime (micro seconds) for sim number " << simulation_number_ << std::endl;
+    for (int i = 0; i < time_replan_.size(); i++) {
+        csvFile << time_replan_[i] << std::endl;
+    }
+    csvFile.close();
+    std::cout << "done writing computation times to csv file" << std::endl;
+
   }
 
   void EGOReplanFSM::execFSMCallback(const ros::TimerEvent &e)
@@ -121,9 +146,14 @@ namespace ego_planner
     {
       if (planner_manager_->pp_.drone_id <= 0 || (planner_manager_->pp_.drone_id >= 1 && have_recv_pre_agent_))
       {
+        // Compute total replanning time (micro seconds)
+        auto start = std::chrono::steady_clock::now();
         bool success = planFromGlobalTraj(10); // zx-todo
         if (success)
         {
+          auto end = std::chrono::steady_clock::now();
+          double elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+          time_replan_.push_back(elapsed_us);
           changeFSMExecState(EXEC_TRAJ, "FSM");
         }
         else
@@ -139,9 +169,18 @@ namespace ego_planner
     case GEN_NEW_TRAJ:
     {
 
+
+      // Compute total replanning time (micro seconds)
+      auto start = std::chrono::steady_clock::now();
+
       bool success = planFromGlobalTraj(10); // zx-todo
       if (success)
       {
+
+        auto end = std::chrono::steady_clock::now();
+        double elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        time_replan_.push_back(elapsed_us);
+
         changeFSMExecState(EXEC_TRAJ, "FSM");
         flag_escape_emergency_ = true;
       }
@@ -155,6 +194,9 @@ namespace ego_planner
     case REPLAN_TRAJ:
     {
 
+      // Compute total replanning time (micro seconds)
+      auto start = std::chrono::steady_clock::now();
+
       if (planFromLocalTraj(1))
       {
         changeFSMExecState(EXEC_TRAJ, "FSM");
@@ -163,6 +205,10 @@ namespace ego_planner
       {
         changeFSMExecState(REPLAN_TRAJ, "FSM");
       }
+
+      auto end = std::chrono::steady_clock::now();
+      double elapsed_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+      time_replan_.push_back(elapsed_us);
 
       break;
     }

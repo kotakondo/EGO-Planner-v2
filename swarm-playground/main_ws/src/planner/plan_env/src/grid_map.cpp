@@ -349,20 +349,48 @@ void GridMap::cloudCallback(const sensor_msgs::PointCloud2ConstPtr &img)
   pcl::PointCloud<pcl::PointXYZ> latest_cloud;
   pcl::fromROSMsg(*img, latest_cloud);
 
-  if (latest_cloud.points.size() == 0)
+  if (latest_cloud.points.empty())
     return;
 
   if (isnan(md_.camera_pos_(0)) || isnan(md_.camera_pos_(1)) || isnan(md_.camera_pos_(2)))
     return;
 
+  // Define the self-filtering radius
+  double self_filter_radius = 0.2;  // Set an appropriate value (meters)
+
+  // Retrieve the transform from sensor frame to world frame
+  std::string target_frame = "world";  
+  std::string source_frame = img->header.frame_id;
+
+  tf::StampedTransform transform;
+  try {
+    tf_listener_.waitForTransform(target_frame, source_frame, img->header.stamp, ros::Duration(0.1));
+    tf_listener_.lookupTransform(target_frame, source_frame, img->header.stamp, transform);
+  } catch (tf::TransformException &ex) {
+    ROS_WARN("TF Error: %s", ex.what());
+    return;
+  }
+
+  // Transform the point cloud to the world frame
+  pcl::PointCloud<pcl::PointXYZ> transformed_cloud;
+  pcl_ros::transformPointCloud(latest_cloud, transformed_cloud, transform);
+
   moveRingBuffer();
 
   pcl::PointXYZ pt;
   Eigen::Vector3d p3d, p3d_inf;
-  for (size_t i = 0; i < latest_cloud.points.size(); ++i)
+  for (size_t i = 0; i < transformed_cloud.points.size(); ++i)
   {
-    pt = latest_cloud.points[i];
+    pt = transformed_cloud.points[i];
     p3d(0) = pt.x, p3d(1) = pt.y, p3d(2) = pt.z;
+
+    // **Compute distance from agent**
+    double dist_to_agent = (p3d - md_.camera_pos_).norm();
+
+    // **Ignore points too close to the agent**
+    if (dist_to_agent < self_filter_radius)
+      continue;
+
     if (p3d.array().isNaN().sum())
       continue;
 

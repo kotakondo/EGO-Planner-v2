@@ -30,8 +30,9 @@ namespace ego_planner
   class EGOReplanFSM
   {
   public:
+
     EGOReplanFSM() {}
-    ~EGOReplanFSM() {}
+    ~EGOReplanFSM();
 
     void init(ros::NodeHandle &nh);
 
@@ -119,6 +120,11 @@ namespace ego_planner
 
     /* ground height measurement */
     bool measureGroundHeight(double &height);
+
+    /* Computation time*/
+    int simulation_number_ = 100;
+    std::vector<double> time_replan_;
+    
   };
 
 } // namespace ego_planner

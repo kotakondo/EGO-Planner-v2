@@ -16,6 +16,10 @@ find_package(catkin REQUIRED COMPONENTS
   visualization_msgs
   cv_bridge
   message_filters
+  sensor_msgs
+  pcl_ros
+  pcl_conversions
+  tf
 )
 
 find_package(Eigen3 REQUIRED)
