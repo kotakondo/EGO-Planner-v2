@@ -10,6 +10,10 @@ from geometry_msgs.msg import PoseStamped
 from snapstack_msgs.msg import State
 from quadrotor_msgs.msg import PositionCommand
 
+# Usage: python3 /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/docker/benchmarking.py <total_sim_runs> <max_duration_seconds> <goal_x,goal_y,goal_z> <goal_threshold>
+# Usage: python3 /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/docker/benchmarking.py 1 100.0 105.0,0.0,3.0 0.5
+
+
 # CSV file to log simulation outcomes.
 CSV_PATH = "/home/kota/data/goal_reached_status_ego_swarm_v2.csv"
 
@@ -74,8 +78,8 @@ def launch_simulation(sim_num, env_source):
     start_world_cmd = f"{env_source} && roslaunch --wait acl_sim start_world.launch"
     perfect_tracker_cmd = f"{env_source} && roslaunch --wait acl_sim perfect_tracker_and_sim.launch x:=0.0 y:=0.0 z:=3.0 yaw:=0.0"
     rviz_cmd = f"{env_source} && roslaunch --wait ego_planner rviz.launch"
-    single_run_cmd = f"{env_source} && roslaunch --wait ego_planner single_run_in_sim.launch simulation_number:={sim_num}"
-    goal_pub_cmd = f"""{env_source} && sleep 10 && rostopic pub /move_base_simple/goal geometry_msgs/PoseStamped '{{header: {{frame_id: "world"}}, pose: {{position: {{x: 105.0, y: 0.0, z: 3.0}}, orientation: {{x: 0.0, y: 0.0, z: 0.0, w: 1.0}}}}}}' -1"""
+    single_run_cmd = f"{env_source} && roslaunch --wait ego_planner single_drone_waypoints.launch simulation_number:={sim_num}"
+    # goal_pub_cmd = f"""{env_source} && sleep 10 && rostopic pub /move_base_simple/goal geometry_msgs/PoseStamped '{{header: {{frame_id: "world"}}, pose: {{position: {{x: 105.0, y: 0.0, z: 3.0}}, orientation: {{x: 0.0, y: 0.0, z: 0.0, w: 1.0}}}}}}' -1"""
     bag_file = f"/home/kota/data/ego_swarm_v2_num_{sim_num}.bag"
     # rosbag_cmd = f"{env_source} && rosbag record /tf /tf_static /rosout /rosout_agg /drone_0_ego_planner_node/optimal_list /drone_0_odom_visualization/path /drone_0_ego_planner_node/grid_map/occupancy_inflate /drone_0_odom_visualization/robot /SQ01s/camera/cloud -O {bag_file}"
     rosbag_cmd = f"{env_source} && rosbag record /tf /tf_static /rosout /rosout_agg /drone_0_ego_planner_node/optimal_list /drone_0_odom_visualization/path /drone_0_ego_planner_node/grid_map/occupancy_inflate /drone_0_odom_visualization/robot /SQ01s/state /drone_0_planning/pos_cmd /move_base_simple/goal -O {bag_file}"
@@ -94,13 +98,13 @@ def launch_simulation(sim_num, env_source):
     processes.append(run_command(rviz_cmd))
     time.sleep(2)
 
-    rospy.loginfo("Launching single_run_in_sim.launch...")
+    rospy.loginfo("Launching single_drone_waypoints.launch...")
     processes.append(run_command(single_run_cmd))
     time.sleep(2)
 
     rospy.loginfo("Launching goal publisher...")
-    processes.append(run_command(goal_pub_cmd))
-    time.sleep(2)
+    # processes.append(run_command(goal_pub_cmd))
+    # time.sleep(2)
 
     rospy.loginfo(f"Launching rosbag recording to {bag_file}...")
     processes.append(run_command(rosbag_cmd))
@@ -128,7 +132,8 @@ if __name__ == "__main__":
     threshold = float(sys.argv[4])
 
     # Use the setup files for ego-swarm.
-    env_source = "source /home/kota/ego_swarm_v2_ws/devel/setup.bash && source /home/kota/mid360_ws/devel/setup.bash"
+    env_source = "source /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/swarm-playground/main_ws/devel/setup.bash && source /home/kota/mid360_ws/devel/setup.bash"
+
 
     # Ensure ROS master is available.
     if not wait_for_ros_master():
@@ -155,7 +160,7 @@ if __name__ == "__main__":
                 rospy.loginfo("Goal reached!")
                 goal_reached = True
                 break
-            time.sleep(1)
+            time.sleep(0.1)
 
         travel_time = time.time() - sim_start_time
         if goal_reached:

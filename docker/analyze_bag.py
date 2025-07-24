@@ -41,8 +41,8 @@ def process_bag(bag_file, tol=0.5, v_constraint=10.0, a_constraint=20.0, j_const
     Returns None if travel time could not be computed.
     """
     bag = rosbag.Bag(bag_file)
-    goal_time = None
-    goal_position = None
+    start_time = None
+    goal_position = (105.0, 0.0, 3.0)  # Default goal position
     travel_end_time = None
     prev_time = None
     prev_acc = None
@@ -60,14 +60,12 @@ def process_bag(bag_file, tol=0.5, v_constraint=10.0, a_constraint=20.0, j_const
 
     print("Processing bag: {}".format(bag_file))
     for topic, msg, t in bag.read_messages(topics=["/move_base_simple/goal", "/drone_0_planning/pos_cmd"]):
-        if topic == "/move_base_simple/goal" and goal_time is None:
-            goal_time = t.to_sec()
-            goal_position = (msg.pose.position.x, msg.pose.position.y, msg.pose.position.z)
-            print("  Found /move_base_simple/goal at time {:.3f}, goal_position = {}".format(goal_time, goal_position))
-        elif topic == "/drone_0_planning/pos_cmd" and goal_time is not None:
+        if topic == "/drone_0_planning/pos_cmd":
+
+            if start_time is None:
+                start_time = t.to_sec()
+            
             pos_time = t.to_sec()
-            if pos_time < goal_time:
-                continue
 
             pos_cmd_times.append(pos_time)
             # Record the current commanded position.
@@ -115,11 +113,12 @@ def process_bag(bag_file, tol=0.5, v_constraint=10.0, a_constraint=20.0, j_const
 
     bag.close()
 
-    if goal_time is None or travel_end_time is None:
+    if start_time is None or travel_end_time is None:
+        print(f" start_time: {start_time}, travel_end_time: {travel_end_time}")
         print("  Could not compute travel time for this bag.")
         return None
 
-    travel_time = travel_end_time - goal_time
+    travel_time = travel_end_time - start_time
 
     # Compute total path length (sum of distances between consecutive positions).
     path_length = 0.0

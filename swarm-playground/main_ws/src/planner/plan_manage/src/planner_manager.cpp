@@ -37,17 +37,20 @@ namespace ego_planner
     ploy_traj_opt_->setDroneId(pp_.drone_id);
   }
 
-  bool EGOPlannerManager::reboundReplan(
+  ReplanResult EGOPlannerManager::reboundReplan(
       const Eigen::Vector3d &start_pt, const Eigen::Vector3d &start_vel,
       const Eigen::Vector3d &start_acc, const Eigen::Vector3d &local_target_pt,
       const Eigen::Vector3d &local_target_vel, const bool flag_polyInit,
       const bool flag_randomPolyTraj, const bool touch_goal)
   {
-    ros::Time t_start = ros::Time::now();
-    ros::Duration t_init, t_opt;
+    ReplanResult res;
+
+    using Clock = std::chrono::steady_clock;
+
+    auto t_start = Clock::now();
 
     static int count = 0;
-    cout << "\033[47;30m\n[" << t_start << "] Drone " << pp_.drone_id << " Replan " << count++ << "\033[0m" << endl;
+    // cout << "\033[47;30m\n[" << t_start << "] Drone " << pp_.drone_id << " Replan " << count++ << "\033[0m" << endl;
     // cout.precision(3);
     // cout << "start: " << start_pt.transpose() << ", " << start_vel.transpose() << "\ngoal:" << local_target_pt.transpose() << ", " << local_target_vel.transpose()
     //      << endl;
@@ -62,24 +65,24 @@ namespace ego_planner
     if (!computeInitState(start_pt, start_vel, start_acc, local_target_pt, local_target_vel,
                           flag_polyInit, flag_randomPolyTraj, ts, initMJO))
     {
-      return false;
+      return res;
     }
 
     Eigen::MatrixXd cstr_pts = initMJO.getInitConstraintPoints(ploy_traj_opt_->get_cps_num_prePiece_());
     vector<std::pair<int, int>> segments;
     if (ploy_traj_opt_->finelyCheckAndSetConstraintPoints(segments, initMJO, true) == PolyTrajOptimizer::CHK_RET::ERR)
     {
-      return false;
+      return res;
     }
 
-    t_init = ros::Time::now() - t_start;
+    res.init_time_ms = std::chrono::duration<double, std::milli>(Clock::now() - t_start).count();
 
     std::vector<Eigen::Vector3d> point_set;
     for (int i = 0; i < cstr_pts.cols(); ++i)
       point_set.push_back(cstr_pts.col(i));
     visualization_->displayInitPathList(point_set, 0.2, 0);
 
-    t_start = ros::Time::now();
+    t_start = Clock::now();
 
     /*** STEP 2: OPTIMIZE ***/
     bool flag_success = false;
@@ -128,13 +131,13 @@ namespace ego_planner
         }
       }
 
-      t_opt = ros::Time::now() - t_start;
+      res.opt_time_ms = std::chrono::duration<double, std::milli>(Clock::now() - t_start).count();
 
       if (trajs.size() > 1)
       {
-        cout << "\033[1;33m"
-             << "multi-trajs=" << trajs.size() << ",\033[1;0m"
-             << " Success:fail=" << success.sum() << ":" << success.size() - success.sum() << endl;
+        // cout << "\033[1;33m"
+        //      << "multi-trajs=" << trajs.size() << ",\033[1;0m"
+        //      << " Success:fail=" << success.sum() << ":" << success.size() - success.sum() << endl;
       }
 
       visualization_->displayMultiOptimalPathList(vis_trajs, 0.1); // This visuallization will take up several milliseconds.
@@ -153,19 +156,19 @@ namespace ego_planner
                                                         innerPts, initTraj.getDurations(), final_cost);
       best_MJO = ploy_traj_opt_->getMinJerkOpt();
 
-      t_opt = ros::Time::now() - t_start;
+      res.opt_time_ms = std::chrono::duration<double, std::milli>(Clock::now() - t_start).count();
     }
 
     /*** STEP 3: Store and display results ***/
-    cout << "Success=" << (flag_success ? "yes" : "no") << endl;
+    // cout << "Success=" << (flag_success ? "yes" : "no") << endl;
     if (flag_success)
     {
-      static double sum_time = 0;
-      static int count_success = 0;
-      sum_time += (t_init + t_opt).toSec();
-      count_success++;
-      printf("Time:\033[42m%.3fms,\033[0m init:%.3fms, optimize:%.3fms, avg=%.3fms\n",
-             (t_init + t_opt).toSec() * 1000, t_init.toSec() * 1000, t_opt.toSec() * 1000, sum_time / count_success * 1000);
+      // static double sum_time = 0;
+      // static int count_success = 0;
+      // sum_time += (t_init + t_opt).toSec();
+      // count_success++;
+      // printf("Time:\033[42m%.3fms,\033[0m init:%.3fms, optimize:%.3fms, avg=%.3fms\n",
+      //        (t_init + t_opt).toSec() * 1000, t_init.toSec() * 1000, t_opt.toSec() * 1000, sum_time / count_success * 1000);
       // cout << "total time:\033[42m" << (t_init + t_opt).toSec()
       //      << "\033[0m,init:" << t_init.toSec()
       //      << ",optimize:" << t_opt.toSec()
@@ -185,7 +188,9 @@ namespace ego_planner
       continous_failures_count_++;
     }
 
-    return flag_success;
+    res.success = flag_success;
+
+    return res;
   }
 
   bool EGOPlannerManager::computeInitState(

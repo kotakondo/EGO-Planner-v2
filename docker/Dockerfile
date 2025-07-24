@@ -120,8 +120,11 @@ RUN echo "alias cb='roscd && catkin build && sb'" >> ~/.bashrc
 RUN echo "alias ss='roscd && source devel/setup.bash'" >> ~/.bashrc
 RUN echo "alias cbf='clear && roscd && catkin build && ss'" >> ~/.bashrc
 
+# environment variables
+RUN echo "export DISABLE_ROS1_EOL_WARNINGS=1" >> ~/.bashrc
+
 # Go to the ego_swarm_v2_ws
-WORKDIR /home/kota/ego_swarm_v2_ws
+WORKDIR /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/swarm-playground/main_ws
 
 # Set up Entry Point
 # ##########################################

@@ -101,7 +101,7 @@ namespace ego_planner
     bool callEmergencyStop(Eigen::Vector3d stop_pos);
 
     /* local planning */
-    bool callReboundReplan(bool flag_use_poly_init, bool flag_randomPolyTraj);
+    ReplanResult callReboundReplan(bool flag_use_poly_init, bool flag_randomPolyTraj);
     bool planFromGlobalTraj(const int trial_times = 1);
     bool planFromLocalTraj(const int trial_times = 1);
 
@@ -123,7 +123,9 @@ namespace ego_planner
 
     /* Computation time*/
     int simulation_number_ = 100;
-    std::vector<double> time_replan_;
+    std::vector<bool> success_vec_;
+    std::vector<double> initi_time_vec_;
+    std::vector<double> opt_time_vec_;
     
   };
 
