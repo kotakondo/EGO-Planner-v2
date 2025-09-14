@@ -1,0 +1,30 @@
+session_name: ego_swarm_v2_benchmarking
+windows:
+  - window_name: main
+    layout: tiled
+    shell_command_before:
+      - cd /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2
+      - source /opt/ros/noetic/setup.bash
+    panes:
+
+      # 1) roscore (runs)
+      - roscore
+
+      # 2) benchmark run (runs)
+      - shell_command:
+        - sleep 5
+        - source /opt/ros/noetic/setup.bash && catkin_make -DBUILD_TYPE=Release
+        - source devel/setup.bash
+        - python3 /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/docker/benchmarking.py 10 300.0 305.0,0.0,3.0 0.5
+
+      # 3.1) bag analyze (prefilled; press Enter to run)
+      - shell_command:
+        - tmux send-keys 'cd /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/docker && python3 analyze_bag.py /home/kota/data 2.0 5.0 30.0'
+
+      # 3.2) collision check (prefilled; press Enter to run)
+      - shell_command:
+        - tmux send-keys 'cd /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/docker && python3 /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/docker/collision_checker.py /home/kota/data/hard_forest_obstacle_parameters.csv /home/kota/data 0.1 /drone_0_planning/pos_cmd'
+
+      # 3.3) computation time average (prefilled; press Enter to run)
+      - shell_command:
+        - tmux send-keys 'cd /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/docker && python3 /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/docker/compute_average_computation.py /home/kota/data'
