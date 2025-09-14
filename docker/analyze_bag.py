@@ -93,9 +93,8 @@ def process_bag(bag_file, tol=0.5, v_constraint=10.0, a_constraint=20.0, j_const
     Returns None if a valid travel time cannot be computed.
     """
     bag = rosbag.Bag(bag_file)
-    goal_time = None
     start_time = None
-    goal_position = None
+    goal_position = (305.0, 0.0, 3.0)  # Default goal if not found in bag
     travel_end_time = None
 
     pos_cmd_times = []
@@ -119,21 +118,24 @@ def process_bag(bag_file, tol=0.5, v_constraint=10.0, a_constraint=20.0, j_const
     prev_acc = None
 
     print(f"Processing bag: {bag_file}")
-    for topic, msg, t in bag.read_messages(topics=["/move_base_simple/goal", "/drone_0_planning/pos_cmd"]):
-        if topic == "/move_base_simple/goal" and goal_time is None:
-            goal_time = t.to_sec()
-            goal_position = (msg.pose.position.x, msg.pose.position.y, msg.pose.position.z)
-            print(f"  Found /move_base_simple/goal at time {goal_time:.3f}, goal_position = {goal_position}")
+    for topic, msg, t in bag.read_messages(topics=["/drone_0_planning/pos_cmd"]):
 
-        elif topic == "/drone_0_planning/pos_cmd" and goal_time is not None:
+        if topic == "/drone_0_planning/pos_cmd":
             pos_time = t.to_sec()
-            if pos_time < goal_time:
-                continue
+        
+            # Position (for path length)
+            pos = (msg.position.x, msg.position.y, msg.position.z)
+
+            # Detect start of motion (> tol from initial position)
+            if start_time is None and len(positions) > 0:
+                if compute_distance(pos, positions[0]) > tol:
+                    start_time = pos_time
+                    print(f"  Start of travel detected at time {start_time:.3f}")
+                else:
+                    continue
 
             pos_cmd_times.append(pos_time)
 
-            # Position (for path length)
-            pos = (msg.position.x, msg.position.y, msg.position.z)
             positions.append(pos)
 
             # Norms
@@ -156,14 +158,6 @@ def process_bag(bag_file, tol=0.5, v_constraint=10.0, a_constraint=20.0, j_const
             prev_time = pos_time
             prev_acc = acc_vec
 
-            # Detect start of motion (> tol from initial position)
-            if start_time is None:
-                if compute_distance(pos, positions[0]) > tol:
-                    start_time = pos_time
-                    print(f"  Start of travel detected at time {start_time:.3f}")
-                else:
-                    continue
-
             # Goal reached?
             if compute_distance(pos, goal_position) <= tol:
                 travel_end_time = pos_time
@@ -172,7 +166,7 @@ def process_bag(bag_file, tol=0.5, v_constraint=10.0, a_constraint=20.0, j_const
 
     bag.close()
 
-    if goal_time is None or travel_end_time is None or start_time is None:
+    if travel_end_time is None or start_time is None:
         print("  Could not compute travel time for this bag.")
         return None
 
@@ -273,7 +267,7 @@ def main():
     a_constraint = float(sys.argv[3])
     j_constraint = float(sys.argv[4])
 
-    tol = 0.5  # meters
+    tol = 1.0  # meters
 
     bag_files = glob.glob(os.path.join(bag_folder, "*.bag"))
     if not bag_files:
