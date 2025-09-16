@@ -89,13 +89,13 @@ def _get_msg_jerk_vec(msg, fallback_acc=None, dt=None):
     return j_vec, acc_vec
 
 
-def compute_Jsmooth_and_Eatt(times,
+def compute_Jsmooth_and_Seff(times,
                              acc_x, acc_y, acc_z,
                              jerk_x=None, jerk_y=None, jerk_z=None):
     """
     Compute:
-      - J_smooth = sqrt((1/T) * ∫ ||jerk||^2 dt)        [m/s^3]
-      - E_att    = ∫ ||snap||^2 dt,  snap = d(jerk)/dt  [m^2/s^7]
+      - J_smooth = sqrt((1/T) * ∫ ||jerk||^2 dt)   [m/s^3]
+      - S_eff    = sqrt((1/T) * ∫ ||snap||^2 dt)   [m/s^4],  snap = d(jerk)/dt
     Also returns 'snaps' = ||snap|| time series aligned with 'times'.
 
     Args:
@@ -104,7 +104,7 @@ def compute_Jsmooth_and_Eatt(times,
       jerk_*:  optional jerk components; if None, jerk is FD from acc
 
     Returns:
-      dict with {'J_smooth': float, 'E_att': float, 'snaps': np.ndarray}
+      dict with {'J_smooth': float, 'S_eff': float, 'snaps': np.ndarray}
     """
     t  = np.asarray(times, float)
     ax = np.asarray(acc_x, float)
@@ -112,7 +112,7 @@ def compute_Jsmooth_and_Eatt(times,
     az = np.asarray(acc_z, float)
     n = min(t.size, ax.size, ay.size, az.size)
     if n < 2:
-        return {"J_smooth": 0.0, "E_att": 0.0, "snaps": np.array([])}
+        return {"J_smooth": 0.0, "S_eff": 0.0, "snaps": np.array([])}
     t, ax, ay, az = t[:n], ax[:n], ay[:n], az[:n]
 
     # Ensure strictly increasing time (avoid zero/negative dt)
@@ -131,20 +131,21 @@ def compute_Jsmooth_and_Eatt(times,
         jz = np.gradient(az, t_inc, edge_order=edge)
 
     # J_smooth (RMS jerk)
-    j2 = jx*jx + jy*jy + jz*jz                    # ||j||^2
-    J2 = _trapz_safe(j2, t_inc)                   # ∫ ||j||^2 dt
+    j2 = jx*jx + jy*jy + jz*jz                  # ||j||^2
+    J2 = _trapz_safe(j2, t_inc)                 # ∫ ||j||^2 dt
     T  = max(float(t_inc[-1] - t_inc[0]), 1e-12)
-    J_smooth = float(np.sqrt(J2 / T))             # [m/s^3]
+    J_smooth = float(np.sqrt(J2 / T))           # [m/s^3]
 
-    # E_att via snap = d/dt jerk
+    # S_eff via snap = d/dt jerk (RMS snap)
     edge = 2 if t_inc.size >= 3 else 1
     sx = np.gradient(jx, t_inc, edge_order=edge)
     sy = np.gradient(jy, t_inc, edge_order=edge)
     sz = np.gradient(jz, t_inc, edge_order=edge)
-    s2 = sx*sx + sy*sy + sz*sz                    # ||s||^2
-    E_att = float(_trapz_safe(s2, t_inc))         # [m^2/s^7]
-    snaps = np.sqrt(s2)                           # ||snap|| time series
-    return {"J_smooth": J_smooth, "E_att": E_att, "snaps": snaps}
+    s2 = sx*sx + sy*sy + sz*sz                  # ||s||^2
+    S2 = _trapz_safe(s2, t_inc)                 # ∫ ||s||^2 dt
+    S_eff = float(np.sqrt(S2 / T))              # [m/s^4]
+    snaps = np.sqrt(s2)                         # ||snap|| time series
+    return {"J_smooth": J_smooth, "S_eff": S_eff, "snaps": snaps}
 
 
 # ----------------------------- Core analysis -----------------------------
@@ -159,7 +160,7 @@ def process_bag(bag_file, tol=0.5, v_constraint=10.0, a_constraint=20.0, j_const
       - path_length: sum of segment lengths over the travel segment
       - smoothness:  ∫ ||jerk|| dt   [m/s^2] (legacy L1 jerk)
       - J_smooth:    RMS jerk         [m/s^3]
-      - E_att:       ∫ ||snap||^2 dt  [m^2/s^7]
+      - S_eff:       RMS snap         [m/s^4]
       - per-message violation counts with 1% slack
       - total_pos_cmds for percentage calculations
     Returns None if a valid travel time cannot be computed.
@@ -279,14 +280,14 @@ def process_bag(bag_file, tol=0.5, v_constraint=10.0, a_constraint=20.0, j_const
     # Legacy L1 jerk (∫||j|| dt) on travel window
     smoothness = _trapz_safe(j_seg, t_seg)  # [m/s^2]
 
-    # New metrics (RMS jerk & squared-snap integral) on travel window
-    metrics = compute_Jsmooth_and_Eatt(
+    # New metrics (RMS jerk & RMS snap) on travel window
+    metrics = compute_Jsmooth_and_Seff(
         times=t_seg,
         acc_x=ax_seg, acc_y=ay_seg, acc_z=az_seg,
         jerk_x=jx_seg, jerk_y=jy_seg, jerk_z=jz_seg
     )
     J_smooth = metrics["J_smooth"]  # [m/s^3]
-    E_att    = metrics["E_att"]     # [m^2/s^7]
+    S_eff    = metrics["S_eff"]     # [m/s^4]
     snaps    = metrics["snaps"]     # ||snap|| aligned with t_seg
 
     result = {
@@ -299,7 +300,7 @@ def process_bag(bag_file, tol=0.5, v_constraint=10.0, a_constraint=20.0, j_const
         "snaps": snaps,
         "smoothness": float(smoothness),  # ∫||j|| dt
         "J_smooth": float(J_smooth),      # RMS jerk
-        "E_att": float(E_att),            # ∫||snap||^2 dt
+        "S_eff": float(S_eff),            # RMS snap (attitude effort)
         "vel_violations": int(vel_violations),
         "acc_violations": int(acc_violations),
         "jerk_violations": int(jerk_violations),
@@ -409,7 +410,7 @@ def main():
     overall_path_lengths = []
     overall_smoothness = []   # ∫||j|| dt (legacy L1 jerk)
     overall_J_smooth = []     # RMS jerk
-    overall_E_att = []        # ∫||snap||^2 dt
+    overall_S_eff = []        # RMS snap
 
     overall_vel_violations = 0
     overall_acc_violations = 0
@@ -431,7 +432,7 @@ def main():
         overall_path_lengths.append(result["path_length"])
         overall_smoothness.append(result["smoothness"])
         overall_J_smooth.append(result["J_smooth"])
-        overall_E_att.append(result["E_att"])
+        overall_S_eff.append(result["S_eff"])
         overall_vel_violations += result["vel_violations"]
         overall_acc_violations += result["acc_violations"]
         overall_jerk_violations += result["jerk_violations"]
@@ -447,7 +448,7 @@ def main():
         stats_lines.append(f"  Path length: {result['path_length']:.3f} m\n")
         stats_lines.append(f"  Smoothness (∫||jerk|| dt): {result['smoothness']:.6f} m/s^2\n")
         stats_lines.append(f"  J_smooth (RMS jerk): {result['J_smooth']:.6f} m/s^3\n")
-        stats_lines.append(f"  E_att (∫||snap||^2 dt): {result['E_att']:.6e} m^2/s^7\n")
+        stats_lines.append(f"  S_eff (RMS snap): {result['S_eff']:.6f} m/s^4\n")
         stats_lines.append(f"  Velocity violations (>{v_constraint} m/s): {result['vel_violations']} ({v_pct:.2f}%)\n")
         stats_lines.append(f"  Acceleration violations (>{a_constraint} m/s²): {result['acc_violations']} ({a_pct:.2f}%)\n")
         stats_lines.append(f"  Jerk violations (>{j_constraint} m/s³): {result['jerk_violations']} ({j_pct:.2f}%)\n\n")
@@ -461,7 +462,7 @@ def main():
         avg_path_length = float(np.mean(overall_path_lengths))
         avg_smoothness = float(np.mean(overall_smoothness)) if overall_smoothness else 0.0
         avg_J_smooth = float(np.mean(overall_J_smooth)) if overall_J_smooth else 0.0
-        avg_E_att = float(np.mean(overall_E_att)) if overall_E_att else 0.0
+        avg_S_eff = float(np.mean(overall_S_eff)) if overall_S_eff else 0.0
 
         stats_lines.append("Overall Statistics:\n")
         stats_lines.append(f"  Processed bag files: {processed_count}\n")
@@ -469,7 +470,7 @@ def main():
         stats_lines.append(f"  Average path length: {avg_path_length:.3f} m\n")
         stats_lines.append(f"  Average smoothness (∫||jerk|| dt): {avg_smoothness:.6f} m/s^2\n")
         stats_lines.append(f"  Average J_smooth (RMS jerk): {avg_J_smooth:.6f} m/s^3\n")
-        stats_lines.append(f"  Average E_att (∫||snap||^2 dt): {avg_E_att:.6e} m^2/s^7\n")
+        stats_lines.append(f"  Average S_eff (RMS snap): {avg_S_eff:.6f} m/s^4\n")
         if overall_cmds > 0:
             stats_lines.append(f"  Velocity violations: {overall_vel_violations / overall_cmds * 100.0:.2f} %\n")
             stats_lines.append(f"  Acceleration violations: {overall_acc_violations / overall_cmds * 100.0:.2f} %\n")
