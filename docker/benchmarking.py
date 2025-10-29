@@ -42,7 +42,7 @@ class SimulationMonitor:
             msg.pos.y,
             msg.pos.z
         )
-        rospy.loginfo("Current position: {}".format(self.current_pose))
+        # rospy.loginfo("Current position: {}".format(self.current_pose))
 
     def reached_goal(self):
         if self.current_pose is None:

@@ -97,23 +97,23 @@ void GridMap::initMap(ros::NodeHandle &nh)
   extrinsic_sub_ = node_.subscribe<nav_msgs::Odometry>(
       "/vins_estimator/extrinsic", 10, &GridMap::extrinsicCallback, this); //sub
 
-  if (mp_.pose_type_ == POSE_STAMPED)
-  {
-    pose_sub_.reset(
-        new message_filters::Subscriber<geometry_msgs::PoseStamped>(node_, "grid_map/pose", 25));
+  // if (mp_.pose_type_ == POSE_STAMPED)
+  // {
+  //   pose_sub_.reset(
+  //       new message_filters::Subscriber<geometry_msgs::PoseStamped>(node_, "grid_map/pose", 25));
 
-    sync_image_pose_.reset(new message_filters::Synchronizer<SyncPolicyImagePose>(
-        SyncPolicyImagePose(100), *depth_sub_, *pose_sub_));
-    sync_image_pose_->registerCallback(boost::bind(&GridMap::depthPoseCallback, this, _1, _2));
-  }
-  else if (mp_.pose_type_ == ODOMETRY)
-  {
-    odom_sub_.reset(new message_filters::Subscriber<nav_msgs::Odometry>(node_, "grid_map/odom", 100, ros::TransportHints().tcpNoDelay()));
+  //   sync_image_pose_.reset(new message_filters::Synchronizer<SyncPolicyImagePose>(
+  //       SyncPolicyImagePose(100), *depth_sub_, *pose_sub_));
+  //   sync_image_pose_->registerCallback(boost::bind(&GridMap::depthPoseCallback, this, _1, _2));
+  // }
+  // else if (mp_.pose_type_ == ODOMETRY)
+  // {
+  //   odom_sub_.reset(new message_filters::Subscriber<nav_msgs::Odometry>(node_, "grid_map/odom", 100, ros::TransportHints().tcpNoDelay()));
 
-    sync_image_odom_.reset(new message_filters::Synchronizer<SyncPolicyImageOdom>(
-        SyncPolicyImageOdom(100), *depth_sub_, *odom_sub_));
-    sync_image_odom_->registerCallback(boost::bind(&GridMap::depthOdomCallback, this, _1, _2));
-  }
+  //   sync_image_odom_.reset(new message_filters::Synchronizer<SyncPolicyImageOdom>(
+  //       SyncPolicyImageOdom(100), *depth_sub_, *odom_sub_));
+  //   sync_image_odom_->registerCallback(boost::bind(&GridMap::depthOdomCallback, this, _1, _2));
+  // }
 
   // use odometry and point cloud
   indep_odom_sub_ =
@@ -232,6 +232,9 @@ void GridMap::fadingCallback(const ros::TimerEvent & /*event*/)
 void GridMap::depthPoseCallback(const sensor_msgs::ImageConstPtr &img,
                                 const geometry_msgs::PoseStampedConstPtr &pose)
 {
+
+  printf("Received depth image with frame_id: %s, stamp: %f\n", img->header.frame_id.c_str(), img->header.stamp.toSec());
+
   /* get depth image */
   cv_bridge::CvImagePtr cv_ptr;
   cv_ptr = cv_bridge::toCvCopy(img, img->encoding);
@@ -339,6 +342,10 @@ void GridMap::odomCallback(const nav_msgs::OdometryConstPtr &odom)
 void GridMap::cloudCallback(const sensor_msgs::PointCloud2ConstPtr &img)
 {
   /* Note: no obstalce elimination in this function! */
+  std::cout << "grid_map: receive point cloud!" << std::endl;
+  std::cout << "md_.has_odom_: " << md_.has_odom_ << std::endl;
+  // print out the img info for debugging
+  printf("Received point cloud with frame_id: %s, stamp: %f\n", img->header.frame_id.c_str(), img->header.stamp.toSec());
 
   if (!md_.has_odom_)
   {
@@ -356,7 +363,7 @@ void GridMap::cloudCallback(const sensor_msgs::PointCloud2ConstPtr &img)
     return;
 
   // Define the self-filtering radius
-  double self_filter_radius = 0.2;  // Set an appropriate value (meters)
+  double self_filter_radius = 0.5;  // Set an appropriate value (meters)
 
   // Retrieve the transform from sensor frame to world frame
   std::string target_frame = "world";  
@@ -918,6 +925,9 @@ void GridMap::publishMapInflate()
             if (md_.occupancy_buffer_inflate_[globalIdx2InfBufIdx(pos2GlobalIdx(Eigen::Vector3d(xd, yd, zd)))])
               cloud.push_back(pcl::PointXYZ(xd, yd, zd));
           }
+          // if you want to see all inflated map, uncomment the following lines and commnet the above
+          // if (md_.occupancy_buffer_inflate_[globalIdx2InfBufIdx(pos2GlobalIdx(Eigen::Vector3d(xd, yd, zd)))])
+          //     cloud.push_back(pcl::PointXYZ(xd, yd, zd));
         }
 
   cloud.width = cloud.points.size();

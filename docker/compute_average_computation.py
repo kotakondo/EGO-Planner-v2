@@ -25,6 +25,10 @@ def compute_stats_and_raw(filepath):
                 opt  = float(row[2])
             except ValueError:
                 continue
+
+            if init < 0 or opt < 0:
+                continue
+
             successes.append(succ)
             init_times.append(init)
             opt_times.append(opt)

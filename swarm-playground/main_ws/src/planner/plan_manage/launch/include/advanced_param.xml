@@ -46,7 +46,7 @@
         <remap from="~planning/heartbeat" to = "/drone_$(arg drone_id)_traj_server/heartbeat"/>
         <remap from="/goal" to = "/goal_with_id"/>
         <remap from="~grid_map/odom" to="/drone_$(arg drone_id)_$(arg odometry_topic)"/>
-        <remap from="~grid_map/cloud" to="/SQ01s/camera/cloud"/>
+        <remap from="~grid_map/cloud" to="/SQ01s/camera/cloud"/> <!-- for livox: <remap from="~grid_map/cloud" to="/livox/lidar"/> -->
         <remap from="~grid_map/pose"   to = "/drone_$(arg drone_id)_$(arg camera_pose_topic)"/>
         <remap from="~grid_map/depth" to = "/drone_$(arg drone_id)_$(arg depth_topic)"/>
         <!-- planning fsm -->
