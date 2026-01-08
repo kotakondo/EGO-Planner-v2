@@ -167,7 +167,7 @@ def process_bag(bag_file, tol=0.5, v_constraint=10.0, a_constraint=20.0, j_const
     """
     bag = rosbag.Bag(bag_file)
     start_time = None
-    goal_position = (305.0, 0.0, 3.0)  # Default goal if not found in bag
+    goal_position = (105.0, 0.0, 3.0)  # Default goal if not found in bag
     travel_end_time = None
 
     # Raw logs (full stream after bag start; we’ll window later)

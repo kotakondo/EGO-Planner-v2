@@ -38,7 +38,7 @@
         <arg name="odom_topic" value="$(arg odom_topic)"/>
         <arg name="flight_type" value="2"/>
         <arg name="point_num" default="1"/>
-        <arg name="target0_x" default="305.0"/>
+        <arg name="target0_x" default="105.0"/>
         <arg name="target0_y" default="0.0"/>
         <arg name="target0_z" default="3.0"/>
         <arg name="simulation_number" value="$(arg simulation_number)"/>

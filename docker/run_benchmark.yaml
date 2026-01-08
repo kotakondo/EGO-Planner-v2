@@ -5,6 +5,7 @@ windows:
     shell_command_before:
       - cd /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2
       - source /opt/ros/noetic/setup.bash
+      - souce /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/swarm-playground/main_ws/devel/setup.bash
     panes:
 
       # 1) roscore (runs)
@@ -15,11 +16,11 @@ windows:
         - sleep 5
         - source /opt/ros/noetic/setup.bash && catkin_make -DBUILD_TYPE=Release
         - source devel/setup.bash
-        - python3 /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/docker/benchmarking.py 10 300.0 305.0,0.0,3.0 0.5
+        - python3 /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/docker/benchmarking.py 10 300.0 105.0,0.0,3.0 0.5
 
       # 3.1) bag analyze (prefilled; press Enter to run)
       - shell_command:
-        - tmux send-keys 'cd /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/docker && python3 analyze_bag.py /home/kota/data 4.0 10.0 30.0'
+        - tmux send-keys 'cd /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/docker && python3 analyze_bag.py /home/kota/data 2.0 5.0 10.0'
 
       # 3.2) collision check (prefilled; press Enter to run)
       - shell_command:
