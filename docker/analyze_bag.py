@@ -201,8 +201,9 @@ def process_bag(bag_file, tol=0.5, v_constraint=10.0, a_constraint=20.0, j_const
         pos = (msg.position.x, msg.position.y, msg.position.z)
 
         # Detect start of motion (> tol from initial position)
+        start_tol = 0.05
         if start_time is None and len(positions) > 0:
-            if compute_distance(pos, positions[0]) > tol:
+            if compute_distance(pos, positions[0]) > start_tol:
                 start_time = pos_time
                 print(f"  Start of travel detected at time {start_time:.3f}")
             else:
