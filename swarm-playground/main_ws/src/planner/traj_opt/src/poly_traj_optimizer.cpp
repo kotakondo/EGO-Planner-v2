@@ -1516,42 +1516,102 @@ namespace ego_planner
                                                Eigen::Vector3d &gradv,
                                                double &costv)
   {
-    double vpen = v.squaredNorm() - max_vel_ * max_vel_;
-    if (vpen > 0)
+    if (use_linf_feas_)
     {
-      gradv = wei_feas_ * 6 * vpen * vpen * v;
-      costv = wei_feas_ * vpen * vpen * vpen;
-      return true;
+      costv = 0;
+      gradv.setZero();
+      bool violated = false;
+      for (int i = 0; i < 3; i++)
+      {
+        double vpen = v(i) * v(i) - max_vel_ * max_vel_;
+        if (vpen > 0)
+        {
+          costv += wei_feas_ * vpen * vpen * vpen;
+          gradv(i) += wei_feas_ * 6 * vpen * vpen * v(i);
+          violated = true;
+        }
+      }
+      return violated;
     }
-    return false;
+    else
+    {
+      double vpen = v.squaredNorm() - max_vel_ * max_vel_;
+      if (vpen > 0)
+      {
+        gradv = wei_feas_ * 6 * vpen * vpen * v;
+        costv = wei_feas_ * vpen * vpen * vpen;
+        return true;
+      }
+      return false;
+    }
   }
 
   bool PolyTrajOptimizer::feasibilityGradCostA(const Eigen::Vector3d &a,
                                                Eigen::Vector3d &grada,
                                                double &costa)
   {
-    double apen = a.squaredNorm() - max_acc_ * max_acc_;
-    if (apen > 0)
+    if (use_linf_feas_)
     {
-      grada = wei_feas_ * 6 * apen * apen * a;
-      costa = wei_feas_ * apen * apen * apen;
-      return true;
+      costa = 0;
+      grada.setZero();
+      bool violated = false;
+      for (int i = 0; i < 3; i++)
+      {
+        double apen = a(i) * a(i) - max_acc_ * max_acc_;
+        if (apen > 0)
+        {
+          costa += wei_feas_ * apen * apen * apen;
+          grada(i) += wei_feas_ * 6 * apen * apen * a(i);
+          violated = true;
+        }
+      }
+      return violated;
     }
-    return false;
+    else
+    {
+      double apen = a.squaredNorm() - max_acc_ * max_acc_;
+      if (apen > 0)
+      {
+        grada = wei_feas_ * 6 * apen * apen * a;
+        costa = wei_feas_ * apen * apen * apen;
+        return true;
+      }
+      return false;
+    }
   }
 
   bool PolyTrajOptimizer::feasibilityGradCostJ(const Eigen::Vector3d &j,
                                                Eigen::Vector3d &gradj,
                                                double &costj)
   {
-    double jpen = j.squaredNorm() - max_jer_ * max_jer_;
-    if (jpen > 0)
+    if (use_linf_feas_)
     {
-      gradj = wei_feas_ * 6 * jpen * jpen * j;
-      costj = wei_feas_ * jpen * jpen * jpen;
-      return true;
+      costj = 0;
+      gradj.setZero();
+      bool violated = false;
+      for (int i = 0; i < 3; i++)
+      {
+        double jpen = j(i) * j(i) - max_jer_ * max_jer_;
+        if (jpen > 0)
+        {
+          costj += wei_feas_ * jpen * jpen * jpen;
+          gradj(i) += wei_feas_ * 6 * jpen * jpen * j(i);
+          violated = true;
+        }
+      }
+      return violated;
     }
-    return false;
+    else
+    {
+      double jpen = j.squaredNorm() - max_jer_ * max_jer_;
+      if (jpen > 0)
+      {
+        gradj = wei_feas_ * 6 * jpen * jpen * j;
+        costj = wei_feas_ * jpen * jpen * jpen;
+        return true;
+      }
+      return false;
+    }
   }
 
   void PolyTrajOptimizer::distanceSqrVarianceWithGradCost2p(const Eigen::MatrixXd &ps,
@@ -1628,6 +1688,7 @@ namespace ego_planner
     nh.param("optimization/max_vel", max_vel_, -1.0);
     nh.param("optimization/max_acc", max_acc_, -1.0);
     nh.param("optimization/max_jer", max_jer_, -1.0);
+    nh.param("optimization/use_linf_feas", use_linf_feas_, false);
   }
 
   void PolyTrajOptimizer::setEnvironment(const GridMap::Ptr &map)

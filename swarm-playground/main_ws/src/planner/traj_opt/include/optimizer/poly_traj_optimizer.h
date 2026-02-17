@@ -100,6 +100,7 @@ namespace ego_planner
     double wei_time_;                                             // time weight
     double obs_clearance_, obs_clearance_soft_, swarm_clearance_; // safe distance
     double max_vel_, max_acc_, max_jer_;                          // dynamic limits
+    bool use_linf_feas_;                                          // true=L-inf (per-axis), false=L2 (norm)
 
     double t_now_;
 

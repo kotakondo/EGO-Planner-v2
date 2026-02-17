@@ -25,22 +25,23 @@ def load_forest_parameters(csv_path):
             cylinders.append(cyl)
     return cylinders
 
-def check_collision(agent_pos, cylinder, drone_radius=0.1):
+def check_collision(agent_pos, cylinder, drone_radius=0):
     """
     Check if agent_pos (tuple of x,y,z) collides with the given cylinder.
     Cylinder is defined by (x, y, z, radius, height), where z is the cylinder's base (here spawned with z = height/2, so it spans z=0 to z=height).
-    If a collision occurs, return a tuple (True, cylinder_id, penetration_distance), 
-    where penetration_distance = (drone_radius + cylinder_radius) - horizontal_distance.
+    Uses point mass collision model (drone_radius=0): collision occurs when
+    the drone center is inside the cylinder.
+    If a collision occurs, return a tuple (True, cylinder_id, penetration_distance),
+    where penetration_distance = cylinder_radius - horizontal_distance.
     Otherwise, return (False, None, None).
     """
     dx = agent_pos[0] - cylinder["x"]
     dy = agent_pos[1] - cylinder["y"]
     horizontal_dist = math.sqrt(dx*dx + dy*dy)
-    allowed_dist = cylinder["radius"] + drone_radius
-    if horizontal_dist <= allowed_dist:
+    if horizontal_dist <= cylinder["radius"]:
         # Check vertical collision: agent's z must be within [0, cylinder["height"]]
         if 0 <= agent_pos[2] <= cylinder["height"]:
-            penetration = allowed_dist - horizontal_dist
+            penetration = cylinder["radius"] - horizontal_dist
             return (True, cylinder["id"], penetration)
     return (False, None, None)
 

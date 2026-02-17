@@ -1,0 +1,14 @@
+session_name: ego_swarm_v2_dynamic
+windows:
+  - window_name: ego_swarm_v2_dynamic
+    layout: tiled
+    shell_command_before:
+      - source /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/swarm-playground/main_ws/devel/setup.bash
+      - source /home/kota/livox_ros_ws/devel/setup.bash
+      - source /home/kota/mid360_ws/devel/setup.bash
+    panes:
+      - roscore
+      - sleep 3 && python3 /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/docker/dynamic_forest.py --num-obstacles 200 --dynamic-ratio 0.65 --seed 0
+      - sleep 5 && roslaunch --wait ego_planner single_drone_waypoints_dynamic.launch simulation_number:=0
+      - sleep 7 && roslaunch --wait ego_planner rviz.launch
+      - echo "Dynamic forest simulation running. Useful commands:" && echo "  rostopic hz /SQ01s/camera/cloud" && echo "  rostopic echo /drone_0_planning/pos_cmd -n1" && echo "  rostopic echo /dynamic_forest/markers -n1"

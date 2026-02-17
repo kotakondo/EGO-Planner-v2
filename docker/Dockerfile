@@ -50,7 +50,7 @@ RUN sudo apt-get install -y libignition-math4-dev
 RUN sudo apt install -y cmake
 RUN apt-get install -y ros-${ROS_DISTRO}-roslint
 RUN apt-get install -y ros-${ROS_DISTRO}-rqt*
-RUN python3 -m pip install pyquaternion
+RUN python3 -m pip install pyquaternion pandas
 
 # Set up Ego-Swarm workspace
 RUN mkdir -p /home/kota/ego_swarm_v2_ws/src
@@ -126,15 +126,13 @@ RUN echo "export DISABLE_ROS1_EOL_WARNINGS=1" >> ~/.bashrc
 # Go to the ego_swarm_v2_ws
 WORKDIR /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/swarm-playground/main_ws
 
-# Set up Entry Point for benchmarking
-# ##########################################
+# Copy tmux session configs
 COPY ./run_benchmark.yaml /
-RUN chmod +x /run_benchmark.yaml
-ENTRYPOINT ["tmuxp", "load", "/run_benchmark.yaml"]
+COPY ./ego_swarm_v2_sim.yml /
+COPY ./ego_swarm_v2_dynamic_sim.yml /
+COPY ./single_drone_waypoints_dynamic.launch \
+     /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/swarm-playground/main_ws/src/planner/plan_manage/launch/
 
-# Set up Entry Point
-# ##########################################
-# COPY ./ego_swarm_v2_sim.yml /
-# RUN chmod +x /ego_swarm_v2_sim.yml
-# ENTRYPOINT ["tmuxp", "load", "/ego_swarm_v2_sim.yml"]
+# Default to bash; Makefile controls what runs
+CMD ["/bin/bash"]
 

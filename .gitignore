@@ -1,0 +1,6 @@
+data_dynamic/
+data_static/
+data/
+__pycache__/
+*.pyc
+.vscode/

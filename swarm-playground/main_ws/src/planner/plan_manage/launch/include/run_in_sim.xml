@@ -25,6 +25,12 @@
     <arg name="target4_y" default="0.0"/>
     <arg name="target4_z" default="0.0"/>
     <arg name="simulation_number" default="0"/>
+    <arg name="planning_horizon" default="4.5"/>
+    <arg name="local_update_range_x" default="10.0"/>
+    <arg name="local_update_range_y" default="10.0"/>
+    <arg name="local_update_range_z" default="10.0"/>
+    <arg name="fading_time" default="1000.0"/>
+    <arg name="use_linf_feas" default="true"/>
 
     <!-- topic of your odometry such as VIO or LIO -->
     <arg name="odom_topic"/>
@@ -53,7 +59,7 @@
         <arg name="max_acc" value="5.0" />
         <arg name="max_jer" value="30.0" />
         <!--always set to 1.5 times grater than sensing horizen-->
-        <arg name="planning_horizon" value="4.5" />
+        <arg name="planning_horizon" value="$(arg planning_horizon)" />
         <arg name="use_multitopology_trajs" value="false" />
         <!-- 1: use 2D Nav Goal to select goal  -->
         <!-- 2: use global waypoints below  -->
@@ -77,6 +83,11 @@
         <arg name="point4_y" value="$(arg target4_y)" />
         <arg name="point4_z" value="$(arg target4_z)" />
         <arg name="simulation_number" value="$(arg simulation_number)"/>
+        <arg name="local_update_range_x" value="$(arg local_update_range_x)"/>
+        <arg name="local_update_range_y" value="$(arg local_update_range_y)"/>
+        <arg name="local_update_range_z" value="$(arg local_update_range_z)"/>
+        <arg name="fading_time" value="$(arg fading_time)"/>
+        <arg name="use_linf_feas" value="$(arg use_linf_feas)"/>
     </include>
     <!-- trajectory server -->
     <node pkg="ego_planner" name="drone_$(arg drone_id)_traj_server" type="traj_server" output="screen">

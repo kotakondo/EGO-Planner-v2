@@ -148,25 +148,24 @@ def compute_Jsmooth_and_Eatt(times,
 
 
 # ----------------------------- Core analysis -----------------------------
-def process_bag(bag_file, tol=0.5, v_constraint=10.0, a_constraint=20.0, j_constraint=30.0):
+def process_bag(bag_file, tol=0.5, v_constraint=5.0, a_constraint=20.0, j_constraint=100.0,
+                goal_position=(305.0, 0.0, 3.0)):
     """
     Process a single bag file (EGO-swarm v2).
 
     Reads /drone_0_planning/pos_cmd.
     Computes:
       - travel_time: from first motion (> tol from start) until goal within tol
-                     (goal fixed to (305, 0, 3) by default)
       - path_length: sum of segment lengths over the travel segment
       - smoothness:  ∫ ||jerk|| dt   [m/s^2] (legacy L1 jerk)
       - J_smooth:    RMS jerk         [m/s^3]
       - E_att:       ∫ ||snap||^2 dt  [m^2/s^7]
-      - per-message violation counts with 1% slack
+      - per-message violation counts (L∞ per-axis, 1e-3 tolerance)
       - total_pos_cmds for percentage calculations
     Returns None if a valid travel time cannot be computed.
     """
     bag = rosbag.Bag(bag_file)
     start_time = None
-    goal_position = (305.0, 0.0, 3.0)  # Default goal if not found in bag
     travel_end_time = None
 
     # Raw logs (full stream after bag start; we’ll window later)
@@ -184,11 +183,11 @@ def process_bag(bag_file, tol=0.5, v_constraint=10.0, a_constraint=20.0, j_const
     acc_violations = 0
     jerk_violations = 0
 
-    # 1% slack on constraints
-    perct = 0.01
-    v_thresh = v_constraint * (1.0 + perct)
-    a_thresh = a_constraint * (1.0 + perct)
-    j_thresh = j_constraint * (1.0 + perct)
+    # Tolerance for numerical errors (matching DYNUS/I-MPC/FAPP benchmark)
+    tolerance = 1e-3
+    v_thresh = v_constraint + tolerance
+    a_thresh = a_constraint + tolerance
+    j_thresh = j_constraint + tolerance
 
     total_pos_cmds = 0
     prev_time = None
@@ -229,9 +228,19 @@ def process_bag(bag_file, tol=0.5, v_constraint=10.0, a_constraint=20.0, j_const
         acc_x.append(acc_vec[0]); acc_y.append(acc_vec[1]); acc_z.append(acc_vec[2])
         jerk_x.append(j_vec[0]);  jerk_y.append(j_vec[1]);  jerk_z.append(j_vec[2])
 
-        if vel > v_thresh: vel_violations += 1
-        if acc > a_thresh: acc_violations += 1
-        if jrk > j_thresh: jerk_violations += 1
+        # Constraint violations: per-axis (L∞) to match DYNUS/I-MPC/FAPP
+        for comp in v_vec:
+            if abs(comp) > v_thresh:
+                vel_violations += 1
+                break
+        for comp in acc_vec:
+            if abs(comp) > a_thresh:
+                acc_violations += 1
+                break
+        for comp in j_vec:
+            if abs(comp) > j_thresh:
+                jerk_violations += 1
+                break
 
         total_pos_cmds += 1
         prev_time = pos_time
@@ -310,7 +319,7 @@ def process_bag(bag_file, tol=0.5, v_constraint=10.0, a_constraint=20.0, j_const
     return result
 
 
-def save_plots(bag_file, results, v_constraint=10.0, a_constraint=20.0, j_constraint=30.0, show_snap=True):
+def save_plots(bag_file, results, v_constraint=5.0, a_constraint=20.0, j_constraint=100.0, show_snap=True):
     """
     Save:
       1) Velocity histogram  -> <bag>_velocity_profile.pdf
@@ -386,14 +395,21 @@ def save_plots(bag_file, results, v_constraint=10.0, a_constraint=20.0, j_constr
 # ----------------------------- Entry point -----------------------------
 def main():
     if len(sys.argv) < 5:
-        print(f"Usage: {sys.argv[0]} <bag_folder> <v_max> <a_max> <j_max>")
-        print("Example: python3 analyze_bag_ego_v2.py /home/kota/data 10.0 20.0 30.0")
+        print(f"Usage: {sys.argv[0]} <bag_folder> <v_max> <a_max> <j_max> [<goal_x,goal_y,goal_z>]")
+        print("Example: python3 analyze_bag.py /home/kota/data 5.0 20.0 100.0")
+        print("Example: python3 analyze_bag.py /home/kota/data_dynamic 5.0 20.0 100.0 105.0,0.0,2.0")
         sys.exit(1)
 
     bag_folder = sys.argv[1]
     v_constraint = float(sys.argv[2])
     a_constraint = float(sys.argv[3])
     j_constraint = float(sys.argv[4])
+
+    # Optional 5th arg: goal position (default 305,0,3 for backward compat)
+    if len(sys.argv) >= 6:
+        goal_position = tuple(map(float, sys.argv[5].split(",")))
+    else:
+        goal_position = (305.0, 0.0, 3.0)
 
     tol = 0.5  # meters
 
@@ -421,7 +437,8 @@ def main():
     stats_lines.append("Bag File Statistics:\n\n")
 
     for bag_file in bag_files:
-        result = process_bag(bag_file, tol, v_constraint, a_constraint, j_constraint)
+        result = process_bag(bag_file, tol, v_constraint, a_constraint, j_constraint,
+                             goal_position=goal_position)
         if result is None:
             stats_lines.append(f"{os.path.basename(bag_file)}: Could not compute travel time (no start/finish)\n\n")
             continue

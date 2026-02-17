@@ -5991,6 +5991,14 @@ Visualization Manager:
           Value: true
       Enabled: true
       Name: MovingObstaclesJoystick2
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /dynamic_forest/markers
+      Name: DynamicForest
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 255; 255; 255

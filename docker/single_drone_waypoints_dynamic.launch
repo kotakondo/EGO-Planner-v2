@@ -1,0 +1,59 @@
+<launch>
+    <!--
+        Dynamic environment matching DYNUS benchmark bounds:
+          x: [-5, 110],  y: [-10, 10],  z: [0.5, 5.0]
+        EGO-Planner map origin = (-map_size_x/2, -map_size_y/2, ground_height)
+        So map_size_x=230 → x∈[-115,115], map_size_y=20 → y∈[-10,10]
+        ground_height=0.0, map_size_z=6 → z∈[0,6]
+    -->
+    <arg name="map_size_x" value="230.0"/>
+    <arg name="map_size_y" value=" 20.0"/>
+    <arg name="map_size_z" value="  6.0"/>
+    <arg name="odom_topic" value="visual_slam/odom" />
+    <arg name="simulation_number" default="0"/>
+
+    <!-- Overridable planner/sensing params (patched by patch_launch_file()) -->
+    <arg name="planning_horizon" default="20.0"/>
+    <arg name="local_update_range_x" default="10.0"/>
+    <arg name="local_update_range_y" default="10.0"/>
+    <arg name="local_update_range_z" default="10.0"/>
+    <arg name="fading_time" default="10.0"/>
+    <arg name="use_linf_feas" default="true"/>
+
+    <include file="$(find ego_planner)/launch/include/run_in_sim.xml">
+        <arg name="drone_id" value="0"/>
+        <arg name="init_x" value="0.0"/>
+        <arg name="init_y" value="0.0"/>
+        <arg name="init_z" value="2.0"/>
+        <arg name="map_size_x" value="$(arg map_size_x)"/>
+        <arg name="map_size_y" value="$(arg map_size_y)"/>
+        <arg name="map_size_z" value="$(arg map_size_z)"/>
+        <arg name="odom_topic" value="$(arg odom_topic)"/>
+        <arg name="flight_type" value="2"/>
+        <arg name="point_num" default="1"/>
+        <arg name="target0_x" default="105.0"/>
+        <arg name="target0_y" default="0.0"/>
+        <arg name="target0_z" default="2.0"/>
+        <arg name="simulation_number" value="$(arg simulation_number)"/>
+        <arg name="planning_horizon" value="$(arg planning_horizon)"/>
+        <arg name="local_update_range_x" value="$(arg local_update_range_x)"/>
+        <arg name="local_update_range_y" value="$(arg local_update_range_y)"/>
+        <arg name="local_update_range_z" value="$(arg local_update_range_z)"/>
+        <arg name="fading_time" value="$(arg fading_time)"/>
+        <arg name="use_linf_feas" value="$(arg use_linf_feas)"/>
+    </include>
+
+    <!-- Map z-origin: default ground_height=1.0 would miss z∈[0.5,1.0), set to 0.0 -->
+    <param name="/drone_0_ego_planner_node/grid_map/ground_height" value="0.0"/>
+
+    <!-- Override grid_map params for dynamic obstacles -->
+    <param name="/drone_0_ego_planner_node/grid_map/virtual_ceil" value="5.0"/>
+    <param name="/drone_0_ego_planner_node/grid_map/virtual_ground" value="0.5"/>
+
+    <!-- Override planner limits to match DYNUS benchmark (v=5, a=20) -->
+    <param name="/drone_0_ego_planner_node/manager/max_vel" value="5.0"/>
+    <param name="/drone_0_ego_planner_node/manager/max_acc" value="20.0"/>
+    <param name="/drone_0_ego_planner_node/optimization/max_vel" value="5.0"/>
+    <param name="/drone_0_ego_planner_node/optimization/max_acc" value="20.0"/>
+
+</launch>
