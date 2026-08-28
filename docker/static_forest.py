@@ -6,14 +6,21 @@ Parses a Gazebo .world file, extracts cylinder obstacles, and publishes:
   - PointCloud2 to /SQ01s/camera/cloud (grid_map cloudCallback)
   - MarkerArray to /dynamic_forest/markers (RViz + collision detection)
 
+The point cloud is filtered to only include obstacles within a configurable
+sensing range of the drone's current position (simulating a real LiDAR).
+Markers are always published for all obstacles (for RViz visualization
+and collision detection).
+
 Usage:
     python3 static_forest.py --world-file /path/to/easy_forest.world
+    python3 static_forest.py --world-file /path/to/hard_forest.world --sensing-range 15.0
 """
 import argparse
 import xml.etree.ElementTree as ET
 import numpy as np
 
 import rospy
+from nav_msgs.msg import Odometry
 from sensor_msgs.msg import PointCloud2, PointField
 from visualization_msgs.msg import Marker, MarkerArray
 from std_msgs.msg import Header
@@ -144,23 +151,34 @@ class StaticForest:
     def __init__(self, args):
         self.publish_rate = args.publish_rate
         self.resolution = args.resolution
+        self.sensing_range = args.sensing_range
 
         # Parse world file
         self.obstacles = parse_world_file(args.world_file)
         rospy.loginfo(f"Loaded {len(self.obstacles)} cylinder obstacles "
                       f"from {args.world_file}")
 
-        # Precompute surface points for all cylinders
-        all_pts = []
-        for obs in self.obstacles:
+        # Precompute surface points per obstacle (list of Nx3 arrays)
+        self.obstacle_points = []
+        self.obstacle_centers = np.empty((len(self.obstacles), 3), dtype=np.float32)
+        for i, obs in enumerate(self.obstacles):
             shell = cylinder_shell(obs['radius'], obs['length'], self.resolution)
             shifted = shell + np.array(
                 [obs['x'], obs['y'], obs['z']], dtype=np.float32)
-            all_pts.append(shifted)
+            self.obstacle_points.append(shifted)
+            self.obstacle_centers[i] = [obs['x'], obs['y'], obs['z']]
 
-        self.static_points = (np.vstack(all_pts) if all_pts
-                              else np.empty((0, 3), dtype=np.float32))
-        rospy.loginfo(f"Total surface points: {self.static_points.shape[0]}")
+        total_pts = sum(p.shape[0] for p in self.obstacle_points)
+        rospy.loginfo(f"Total surface points: {total_pts}, "
+                      f"sensing range: {self.sensing_range}m")
+
+        # Drone position (updated via odometry callback)
+        self.drone_pos = np.array([0.0, 0.0, 2.0], dtype=np.float32)
+        self.has_odom = False
+
+        # Subscribers
+        self.odom_sub = rospy.Subscriber(
+            "/drone_0_visual_slam/odom", Odometry, self.odom_cb)
 
         # Publishers
         self.cloud_pub = rospy.Publisher(
@@ -172,21 +190,46 @@ class StaticForest:
         self.timer = rospy.Timer(
             rospy.Duration(1.0 / self.publish_rate), self.timer_cb)
 
+    def odom_cb(self, msg):
+        self.drone_pos[0] = msg.pose.pose.position.x
+        self.drone_pos[1] = msg.pose.pose.position.y
+        self.drone_pos[2] = msg.pose.pose.position.z
+        self.has_odom = True
+
     def timer_cb(self, event):
         if rospy.is_shutdown():
             return
         stamp = rospy.Time.now()
 
         try:
-            # Publish PointCloud2
-            if self.static_points.shape[0] > 0:
-                cloud_msg = make_pointcloud2(self.static_points, stamp)
-                self.cloud_pub.publish(cloud_msg)
-
-            # Publish MarkerArray
+            # Publish PointCloud2 (only obstacles within sensing range)
+            self._publish_cloud(stamp)
+            # Publish MarkerArray (always all obstacles for RViz + collision)
             self._publish_markers(stamp)
         except rospy.ROSException:
             pass
+
+    def _publish_cloud(self, stamp):
+        """Publish point cloud for obstacles within sensing range of drone."""
+        if len(self.obstacle_points) == 0:
+            return
+
+        # Compute 2D (x,y) distance from drone to each obstacle center
+        dx = self.obstacle_centers[:, 0] - self.drone_pos[0]
+        dy = self.obstacle_centers[:, 1] - self.drone_pos[1]
+        dists = np.sqrt(dx * dx + dy * dy)
+
+        # Select obstacles within sensing range
+        nearby = dists < self.sensing_range
+        if not np.any(nearby):
+            return
+
+        nearby_points = [self.obstacle_points[i]
+                         for i in range(len(self.obstacle_points)) if nearby[i]]
+        points = np.vstack(nearby_points)
+
+        cloud_msg = make_pointcloud2(points, stamp)
+        self.cloud_pub.publish(cloud_msg)
 
     def _publish_markers(self, stamp):
         ma = MarkerArray()
@@ -228,6 +271,10 @@ def main():
                         help="PointCloud2 / MarkerArray publish rate (Hz)")
     parser.add_argument("--resolution", type=float, default=0.15,
                         help="Surface point resolution (m)")
+    parser.add_argument("--sensing-range", type=float, default=15.0,
+                        help="Simulated sensor range in meters (default: 15.0). "
+                             "Only obstacles within this 2D distance of the drone "
+                             "are included in the point cloud.")
     args = parser.parse_args(rospy.myargv()[1:])
 
     rospy.init_node("static_forest", anonymous=False)

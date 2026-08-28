@@ -1,0 +1,140 @@
+Panels:
+  - Class: rviz/Displays
+    Help Height: 0
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /Obstacles1
+        - /Drone1
+      Splitter Ratio: 0.5
+    Tree Height: 400
+  - Class: rviz/Views
+    Expanded:
+      - /Current View1
+    Name: Views
+    Splitter Ratio: 0.5
+
+Visualization Manager:
+  Class: ""
+  Displays:
+    # ── Static forest obstacles (MarkerArray from bag) ──
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /dynamic_forest/markers
+      Name: Obstacles
+      Namespaces: {}
+      Queue Size: 1
+      Value: true
+
+    # ── Occupancy grid (inflated map) ──
+    - Class: rviz/PointCloud2
+      Color: 0; 255; 0
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: true
+      Max Color: 255; 255; 255
+      Min Color: 0; 0; 0
+      Name: OccupancyInflate
+      Position Transformer: XYZ
+      Queue Size: 1
+      Selectable: false
+      Size (Pixels): 2
+      Size (m): 0.1
+      Style: Points
+      Topic: /drone_0_ego_planner_node/grid_map/occupancy_inflate
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
+
+    # ── Drone group ──
+    - Class: rviz/Group
+      Displays:
+        # Drone marker (robot mesh)
+        - Class: rviz/Marker
+          Enabled: true
+          Marker Topic: /drone_0_odom_visualization/robot
+          Name: Robot
+          Queue Size: 1
+          Value: true
+
+        # Executed path
+        - Class: rviz/Path
+          Color: 0; 255; 255
+          Enabled: true
+          Head Diameter: 0
+          Head Length: 0
+          Length: 0.3
+          Line Style: Lines
+          Line Width: 0.03
+          Name: Path
+          Offset:
+            X: 0
+            Y: 0
+            Z: 0
+          Pose Color: 255; 85; 255
+          Pose Style: None
+          Queue Size: 1
+          Shaft Diameter: 0
+          Shaft Length: 0
+          Topic: /drone_0_odom_visualization/path
+          Value: true
+
+        # Optimal trajectory
+        - Class: rviz/Marker
+          Enabled: true
+          Marker Topic: /drone_0_ego_planner_node/optimal_list
+          Name: OptimalTraj
+          Queue Size: 1
+          Value: true
+
+      Enabled: true
+      Name: Drone
+
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Default Light: true
+    Fixed Frame: world
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz/Interact
+      Hide Inactive Objects: true
+    - Class: rviz/MoveCamera
+    - Class: rviz/FocusCamera
+  Value: true
+  Views:
+    Current:
+      Class: rviz/ThirdPersonFollower
+      Distance: 40
+      Enable Stereo Rendering:
+        Stereo Eye Separation: 0.06
+        Stereo Focal Distance: 1
+        Swap Stereo Eyes: false
+        Value: false
+      Field of View: 0.7854
+      Focal Point:
+        X: 50
+        Y: 0
+        Z: 2
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05
+      Invert Z Axis: false
+      Name: Current View
+      Near Clip Distance: 0.01
+      Pitch: 0.5
+      Target Frame: <Fixed Frame>
+      Yaw: 3.14
+    Saved: ~
+Window Geometry:
+  Displays:
+    collapsed: false
+  Height: 1080
+  Hide Left Dock: false
+  Hide Right Dock: true
+  Views:
+    collapsed: true
+  Width: 1920
+  X: 0
+  Y: 0

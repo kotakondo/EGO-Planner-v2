@@ -17,6 +17,7 @@ Trefoil knot formula (matching DYNUS dyn_obstacles.launch.py):
   where tt = t/slower + offset
 """
 import argparse
+import json
 import numpy as np
 
 import rospy
@@ -181,9 +182,6 @@ class DynamicForest:
         self.publish_rate = args.publish_rate
         self.des_clearance = args.des_clearance
 
-        n_dynamic = int(round(self.num_obstacles * self.dynamic_ratio))
-        n_static = self.num_obstacles - n_dynamic
-
         # ── Read planner params from ROS parameter server ───────────
         self.planning_horizon = rospy.get_param(
             "/drone_0_ego_planner_node/manager/planning_horizon", 4.5)
@@ -196,43 +194,14 @@ class DynamicForest:
                       f"max_vel={self.max_vel}m/s, "
                       f"horizon_radius={self.horizon_radius:.1f}m")
 
-        # ── Generate obstacle parameters deterministically ──────────
-        self.dynamic_obs = []
-        for _ in range(n_dynamic):
-            x0 = self.rng.uniform(args.x_min, args.x_max)
-            y0 = self.rng.uniform(args.y_min, args.y_max)
-            z0 = self.rng.uniform(args.z_min, args.z_max)
-            sx = self.rng.uniform(2.0, 4.0)
-            sy = self.rng.uniform(2.0, 4.0)
-            sz = self.rng.uniform(2.0, 4.0)
-            offset = self.rng.uniform(0.0, 3.0)
-            slower = self.rng.uniform(4.0, 6.0)
-            self.dynamic_obs.append({
-                "x0": x0, "y0": y0, "z0": z0,
-                "sx": sx, "sy": sy, "sz": sz,
-                "offset": offset, "slower": slower,
-                "bbox": (0.8, 0.8, 0.8),
-            })
+        # ── Load or generate obstacle parameters ────────────────────
+        if args.obstacles_json:
+            self._load_from_json(args.obstacles_json)
+        else:
+            self._generate_obstacles(args)
 
-        self.static_obs = []
-        n_static_vert = int(n_static * 0.35)  # 35% vertical (deterministic, matching DYNUS)
-        for i in range(n_static):
-            x0 = self.rng.uniform(args.x_min, args.x_max)
-            y0 = self.rng.uniform(args.y_min, args.y_max)
-            z0 = self.rng.uniform(args.z_min, args.z_max)
-            if i < n_static_vert:
-                # Vertical pillar — grounded at z = bbox_height/2 (matching DYNUS)
-                bx, by, bz = 0.4, 0.4, 4.0
-                z0 = bz / 2.0  # = 2.0
-            else:
-                # Horizontal wall
-                bx, by, bz = 0.4, 4.0, 0.4
-            voxels = voxel_shell(bx, by, bz, self.resolution)
-            self.static_obs.append({
-                "x0": x0, "y0": y0, "z0": z0,
-                "voxels": voxels,
-                "bbox": (bx, by, bz),
-            })
+        n_dynamic = len(self.dynamic_obs)
+        n_static = len(self.static_obs)
 
         # Precompute static points (they never move)
         static_pts = []
@@ -266,6 +235,86 @@ class DynamicForest:
         self.timer = rospy.Timer(
             rospy.Duration(1.0 / self.publish_rate), self.timer_cb)
         self.t0 = rospy.get_time()
+
+    def _generate_obstacles(self, args):
+        """Generate obstacles from seed (original behavior)."""
+        n_dynamic = int(round(self.num_obstacles * self.dynamic_ratio))
+        n_static = self.num_obstacles - n_dynamic
+
+        self.dynamic_obs = []
+        for _ in range(n_dynamic):
+            x0 = self.rng.uniform(args.x_min, args.x_max)
+            y0 = self.rng.uniform(args.y_min, args.y_max)
+            z0 = self.rng.uniform(args.z_min, args.z_max)
+            sx = self.rng.uniform(2.0, 4.0)
+            sy = self.rng.uniform(2.0, 4.0)
+            sz = self.rng.uniform(2.0, 4.0)
+            offset = self.rng.uniform(0.0, 3.0)
+            slower = self.rng.uniform(4.0, 6.0)
+            self.dynamic_obs.append({
+                "x0": x0, "y0": y0, "z0": z0,
+                "sx": sx, "sy": sy, "sz": sz,
+                "offset": offset, "slower": slower,
+                "bbox": (0.8, 0.8, 0.8),
+            })
+
+        self.static_obs = []
+        n_static_vert = int(n_static * 0.35)
+        for i in range(n_static):
+            x0 = self.rng.uniform(args.x_min, args.x_max)
+            y0 = self.rng.uniform(args.y_min, args.y_max)
+            z0 = self.rng.uniform(args.z_min, args.z_max)
+            if i < n_static_vert:
+                bx, by, bz = 0.4, 0.4, 4.0
+                z0 = bz / 2.0
+            else:
+                bx, by, bz = 0.4, 4.0, 0.4
+            voxels = voxel_shell(bx, by, bz, self.resolution)
+            self.static_obs.append({
+                "x0": x0, "y0": y0, "z0": z0,
+                "voxels": voxels,
+                "bbox": (bx, by, bz),
+            })
+
+    def _load_from_json(self, json_path):
+        """Load obstacles from shared benchmark JSON config."""
+        rospy.loginfo(f"Loading obstacles from JSON: {json_path}")
+        with open(json_path) as f:
+            raw = json.load(f)
+
+        # Support both {"metadata": ..., "obstacles": [...]} and flat list
+        if isinstance(raw, dict) and "obstacles" in raw:
+            obs_list = raw["obstacles"]
+        else:
+            obs_list = raw
+
+        self.dynamic_obs = []
+        self.static_obs = []
+        for item in obs_list:
+            is_dynamic = item.get("is_dynamic", item.get("scale_x", 0) > 0)
+            if is_dynamic:
+                self.dynamic_obs.append({
+                    "x0": item["x0"], "y0": item["y0"], "z0": item["z0"],
+                    "sx": item["scale_x"], "sy": item["scale_y"], "sz": item["scale_z"],
+                    "offset": item["offset"], "slower": item["slower"],
+                    "bbox": (item.get("size_x", 0.8),
+                             item.get("size_y", 0.8),
+                             item.get("size_z", 0.8)),
+                })
+            else:
+                bx = item.get("size_x", 0.4)
+                by = item.get("size_y", 0.4)
+                bz = item.get("size_z", 0.4)
+                voxels = voxel_shell(bx, by, bz, self.resolution)
+                self.static_obs.append({
+                    "x0": item["x0"], "y0": item["y0"], "z0": item["z0"],
+                    "voxels": voxels,
+                    "bbox": (bx, by, bz),
+                })
+
+        self.num_obstacles = len(self.dynamic_obs) + len(self.static_obs)
+        rospy.loginfo(f"Loaded {len(self.dynamic_obs)} dynamic + "
+                      f"{len(self.static_obs)} static obstacles from JSON")
 
     def _odom_cb(self, msg):
         self.drone_pos = np.array([
@@ -389,6 +438,9 @@ def main():
     parser.add_argument("--des-clearance", type=float, default=0.4,
                         help="Per-obstacle clearance radius for MINCOTraj "
                              "(half of 0.8m bbox)")
+    parser.add_argument("--obstacles-json", type=str, default=None,
+                        help="Path to shared benchmark obstacle JSON config. "
+                             "When set, overrides seed-based generation.")
     # Spawn ranges matching DYNUS benchmark
     parser.add_argument("--x-min", type=float, default=5.0)
     parser.add_argument("--x-max", type=float, default=100.0)

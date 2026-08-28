@@ -6,7 +6,8 @@
         check-collisions-dynamic compute-stats-dynamic analyze-all-dynamic \
         shell-dynamic run-dynamic-benchmark-sweep analyze-dynamic-sweep \
         run-static-benchmark _run-static-case analyze-static-benchmark \
-        _analyze-static-case shell-static
+        _analyze-static-case shell-static \
+        playback-bag record-video run-static-sim-record run-dynamic-sim-record
 
 # ── Image name ────────────────────────────────────────────────────────────────
 IMAGE_NAME := ego_swarm_v2
@@ -32,7 +33,8 @@ TIMEOUT        ?= 100.0
 RVIZ           ?= 1
 WEIGHT_TIME    ?= 10.0
 MAX_VEL            ?= 5.0
-PLANNING_HORIZON   ?= 11.25
+PLANNING_HORIZON         ?= 7.5
+PLANNING_HORIZON_STATIC  ?= 20.0
 ALG_NAME       ?= \\multicolumn{2}{c}{EGO-Swarm2}
 MULTIROW_GROUP ?=
 MULTIROW_SIZE  ?= 6
@@ -191,7 +193,9 @@ run-dynamic-benchmark:
 	@echo ""
 	@echo "Data will be saved to: $(abspath $(DATA_DIR_DYNAMIC))/"
 	@mkdir -p $(DATA_DIR_DYNAMIC)
-	docker run -it $(DOCKER_RUN_FLAGS_DYNAMIC) $(IMAGE_NAME) \
+	docker run -it $(DOCKER_RUN_FLAGS_DYNAMIC) \
+		$(if $(OBSTACLES_JSON_DIR),--volume=$(abspath $(OBSTACLES_JSON_DIR)):/tmp/shared_obstacles:ro,) \
+		$(IMAGE_NAME) \
 		/bin/bash -c "\
 			cp $(SCRIPTS)/single_drone_waypoints_dynamic.launch $(LAUNCH_DIR)/ && \
 			$(ENV_SOURCE) && \
@@ -206,7 +210,8 @@ run-dynamic-benchmark:
 				--max-vel $(MAX_VEL) \
 				--planning-horizon $(PLANNING_HORIZON) \
 				--case-name $(CASE) \
-				$(if $(filter-out 0,$(RVIZ)),--rviz,)"
+				$(if $(filter-out 0,$(RVIZ)),--rviz,) \
+				$(if $(OBSTACLES_JSON_DIR),--obstacles-json-dir /tmp/shared_obstacles,)"
 
 ## Analyze latest dynamic benchmark (collisions + stats + LaTeX table)
 ## Override BENCHMARK_DIR to analyze a specific run, e.g.:
@@ -230,10 +235,10 @@ analyze-all-dynamic: analyze-dynamic
 ## Run benchmark sweep over difficulty cases (easy=50, medium=100, hard=200 obstacles)
 ## Set SKIP_HARD=1 to skip the hard case (e.g. if already collected)
 run-dynamic-benchmark-sweep:
-	$(MAKE) run-dynamic-benchmark CASE=easy NUM_OBSTACLES=50
-	$(MAKE) run-dynamic-benchmark CASE=medium NUM_OBSTACLES=100
+	$(MAKE) run-dynamic-benchmark CASE=easy NUM_OBSTACLES=50 $(if $(OBSTACLES_JSON_BASE),OBSTACLES_JSON_DIR=$(OBSTACLES_JSON_BASE)/obstacles_easy,)
+	$(MAKE) run-dynamic-benchmark CASE=medium NUM_OBSTACLES=100 $(if $(OBSTACLES_JSON_BASE),OBSTACLES_JSON_DIR=$(OBSTACLES_JSON_BASE)/obstacles_medium,)
 ifneq ($(SKIP_HARD),1)
-	$(MAKE) run-dynamic-benchmark CASE=hard NUM_OBSTACLES=200
+	$(MAKE) run-dynamic-benchmark CASE=hard NUM_OBSTACLES=200 $(if $(OBSTACLES_JSON_BASE),OBSTACLES_JSON_DIR=$(OBSTACLES_JSON_BASE)/obstacles_hard,)
 endif
 
 ## Analyze all case sweep results and update LaTeX table
@@ -312,7 +317,7 @@ _run-static-case:
 				--seed-start $(SEED) \
 				--output-dir /home/kota/data_static \
 				--max-vel $(MAX_VEL) \
-				--planning-horizon $(PLANNING_HORIZON) \
+				--planning-horizon $(PLANNING_HORIZON_STATIC) \
 				--case-name $(CASE) \
 				--static-world /home/kota/dynus_worlds/$(CASE)_forest.world \
 				--use-linf-feas $(USE_LINF_FEAS) \
@@ -458,3 +463,145 @@ help:
 	@echo "  make run-static-benchmark NUM_TRIALS=5            # fewer trials"
 	@echo "  make analyze-static-benchmark                     # analyze all static results"
 	@echo "  make shell"
+	@echo ""
+	@echo "Targets (visualization & video recording):"
+	@echo "  run-static-sim-record   Run static forest sim with bag recording + RViz"
+	@echo "  run-dynamic-sim-record  Run dynamic env sim with bag recording + RViz"
+	@echo "  playback-bag            Play back a recorded bag in RViz (interactive tmux)"
+	@echo "  record-video            Play bag + screen-capture RViz to MP4 video"
+	@echo ""
+	@echo "Examples:"
+	@echo "  make run-static-sim-record CASE=hard"
+	@echo "  make run-dynamic-sim-record CASE=hard                    # 200 obstacles, 65% dynamic"
+	@echo "  make run-dynamic-sim-record CASE=easy NUM_OBSTACLES=50   # easy case"
+	@echo "  make playback-bag BAG_FILE=/home/kota/data_video/bags/trial_0.bag"
+	@echo "  make record-video BAG_FILE=/home/kota/data_video/bags/trial_0.bag VIDEO_OUT=/home/kota/data_video/hard_forest.mp4"
+
+# ── Video / visualization parameters ──────────────────────────────────
+DATA_DIR_VIDEO  ?= ../data_video
+BAG_FILE        ?=
+VIDEO_OUT       ?= /home/kota/data_video/ego_swarm_v2_hard_forest.mp4
+PLAYBACK_RATE   ?= 1.0
+
+DOCKER_RUN_FLAGS_VIDEO := \
+	--gpus all \
+	--env="NVIDIA_DRIVER_CAPABILITIES=all" \
+	--privileged \
+	-e DISPLAY=$(DISPLAY) \
+	--network=host \
+	--env="QT_X11_NO_MITSHM=1" \
+	--env="DISABLE_ROS1_EOL_WARNINGS=1" \
+	--volume=/tmp/.X11-unix:/tmp/.X11-unix:rw \
+	-v $(abspath $(DATA_DIR_VIDEO)):/home/kota/data_video \
+	-v $(abspath $(DATA_DIR_STATIC)):/home/kota/data_static \
+	-v $(abspath .):/home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/docker \
+	-v $(abspath $(LAUNCH_INCLUDE_HOST)):$(LAUNCH_DIR)/include \
+	-v $(WORLDS_DIR_HOST):/home/kota/dynus_worlds \
+	--rm
+
+# ── Visualization & video targets ────────────────────────────────────
+
+## Run a single static hard-forest trial with RViz + rosbag recording
+## Bag is saved to data_video/bags/trial_0.bag with all visualization topics
+run-static-sim-record:
+	@echo "EGO-Swarm v2 — Record Static Hard Forest Flight"
+	@echo "  CASE       = $(CASE)"
+	@echo "  Output dir = $(abspath $(DATA_DIR_VIDEO))/"
+	@echo ""
+	@mkdir -p $(DATA_DIR_VIDEO)
+	docker run -it $(DOCKER_RUN_FLAGS_VIDEO) $(IMAGE_NAME) \
+		/bin/bash -c "\
+			cp $(SCRIPTS)/single_drone_waypoints_dynamic.launch $(LAUNCH_DIR)/ && \
+			$(ENV_SOURCE) && \
+			python3 $(SCRIPTS)/run_ego_benchmark.py \
+				--num-trials 1 \
+				--timeout $(STATIC_TIMEOUT) \
+				--num-obstacles 0 \
+				--dynamic-ratio 0.0 \
+				--seed-start 0 \
+				--output-dir /home/kota/data_video \
+				--max-vel $(MAX_VEL) \
+				--planning-horizon $(PLANNING_HORIZON_STATIC) \
+				--case-name $(CASE) \
+				--static-world /home/kota/dynus_worlds/$(CASE)_forest.world \
+				--use-linf-feas $(USE_LINF_FEAS) \
+				--rviz"
+
+## Run a single dynamic trial with RViz + rosbag recording
+## Bag is saved to data_video/<case>_benchmark_<ts>/bags/trial_0.bag
+run-dynamic-sim-record:
+	@echo "EGO-Swarm v2 — Record Dynamic Flight"
+	@echo "  CASE           = $(CASE)"
+	@echo "  NUM_OBSTACLES  = $(NUM_OBSTACLES)"
+	@echo "  DYNAMIC_RATIO  = $(DYNAMIC_RATIO)"
+	@echo "  SEED           = $(SEED)"
+	@echo "  Output dir     = $(abspath $(DATA_DIR_VIDEO))/"
+	@echo ""
+	@mkdir -p $(DATA_DIR_VIDEO)
+	docker run -it $(DOCKER_RUN_FLAGS_VIDEO) \
+		$(if $(OBSTACLES_JSON),--volume=$(abspath $(OBSTACLES_JSON)):/tmp/obstacles_seed$(SEED).json:ro,) \
+		$(IMAGE_NAME) \
+		/bin/bash -c "\
+			cp $(SCRIPTS)/single_drone_waypoints_dynamic.launch $(LAUNCH_DIR)/ && \
+			$(ENV_SOURCE) && \
+			python3 $(SCRIPTS)/run_ego_benchmark.py \
+				--num-trials 1 \
+				--timeout $(TIMEOUT) \
+				--num-obstacles $(NUM_OBSTACLES) \
+				--dynamic-ratio $(DYNAMIC_RATIO) \
+				--seed-start $(SEED) \
+				--output-dir /home/kota/data_video \
+				--weight-time $(WEIGHT_TIME) \
+				--max-vel $(MAX_VEL) \
+				--planning-horizon $(PLANNING_HORIZON) \
+				--case-name $(CASE) \
+				--use-linf-feas $(USE_LINF_FEAS) \
+				--rviz \
+				$(if $(OBSTACLES_JSON),--obstacles-json-dir /tmp,)"
+
+## Interactive rosbag playback in RViz (tmux session)
+## Usage: make playback-bag BAG_FILE=<path_inside_container>
+playback-bag:
+	@if [ -z "$(BAG_FILE)" ]; then \
+		echo "ERROR: set BAG_FILE, e.g.:"; \
+		echo "  make playback-bag BAG_FILE=/home/kota/data_video/hard_static_benchmark_.../bags/trial_0.bag"; \
+		echo ""; \
+		echo "Or to play an existing data_static bag:"; \
+		echo "  make playback-bag BAG_FILE=/home/kota/data_static/hard_static_benchmark_20260216_210615_l2/bags/trial_0.bag"; \
+		exit 1; \
+	fi
+	@mkdir -p $(DATA_DIR_VIDEO)
+	docker run -it $(DOCKER_RUN_FLAGS_VIDEO) $(IMAGE_NAME) \
+		/bin/bash -c "\
+			$(ENV_SOURCE) && \
+			export ROS_PACKAGE_PATH=/home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/swarm-playground/main_ws/src:\$$ROS_PACKAGE_PATH && \
+			ln -sfn /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/swarm-playground/main_ws/src/Utils/odom_visualization /opt/ros/noetic/share/odom_visualization && \
+			rospack profile > /dev/null 2>&1 && \
+			python3 -c \"\
+import re; c=open('$(LAUNCH_DIR)/include/default.rviz').read(); \
+c=re.sub(r'.*Goal3DTool.*\\n','',c); \
+c=re.sub(r'.*SelectedPointsPublisher.*\\n','',c); \
+c=re.sub(r'(Enabled: )false(\\n          Name: Simulation)',r'\\1true\\2',c); \
+c=re.sub(r'Target Frame: .*',r'Target Frame: drone_0',c); \
+c=c.replace('Class: rviz/ThirdPersonFollower','Class: rviz/Orbit',1); \
+open('/tmp/playback.rviz','w').write(c)\" && \
+			roscore & sleep 3 && \
+			python3 $(SCRIPTS)/odom_to_tf.py & \
+			rviz -d /tmp/playback.rviz & sleep 5 && \
+			echo '=== Playing $(BAG_FILE) ===' && \
+			echo 'Press Ctrl+C to stop' && \
+			rosbag play $(BAG_FILE) --clock -l -r $(PLAYBACK_RATE)"
+
+## Record RViz playback to MP4 video
+## Usage: make record-video BAG_FILE=<path> VIDEO_OUT=<path>
+record-video:
+	@if [ -z "$(BAG_FILE)" ]; then \
+		echo "ERROR: set BAG_FILE"; \
+		exit 1; \
+	fi
+	@mkdir -p $(DATA_DIR_VIDEO)
+	docker run -it $(DOCKER_RUN_FLAGS_VIDEO) $(IMAGE_NAME) \
+		/bin/bash -c "\
+			$(ENV_SOURCE) && \
+			apt-get update -qq && apt-get install -y -qq ffmpeg xdotool && \
+			bash $(SCRIPTS)/record_video.sh $(BAG_FILE) $(VIDEO_OUT) $(PLAYBACK_RATE)"

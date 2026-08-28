@@ -25,7 +25,7 @@
     <arg name="target4_y" default="0.0"/>
     <arg name="target4_z" default="0.0"/>
     <arg name="simulation_number" default="0"/>
-    <arg name="planning_horizon" default="4.5"/>
+    <arg name="planning_horizon" default="7.5"/>
     <arg name="local_update_range_x" default="10.0"/>
     <arg name="local_update_range_y" default="10.0"/>
     <arg name="local_update_range_z" default="10.0"/>

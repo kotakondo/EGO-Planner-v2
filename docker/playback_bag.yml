@@ -1,0 +1,10 @@
+session_name: ego_swarm_v2_playback
+windows:
+  - window_name: playback
+    layout: tiled
+    shell_command_before:
+      - source /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/swarm-playground/main_ws/devel/setup.bash
+    panes:
+      - roscore
+      - sleep 3 && rviz -d /home/kota/ego_swarm_v2_ws/src/EGO-Planner-v2/docker/playback_rviz.rviz
+      - sleep 5 && echo "== ROSBAG PLAYBACK ==" && echo "Run: rosbag play /home/kota/data_static/<benchmark_dir>/bags/trial_0.bag --clock -l" && echo "" && echo "Or for video recording:" && echo "  rosbag play /path/to/bag --clock" && echo "" && echo "Available bags:" && ls /home/kota/data_static/*/bags/*.bag 2>/dev/null || echo "(mount data_static to see bags)"

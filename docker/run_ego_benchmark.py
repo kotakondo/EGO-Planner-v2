@@ -547,12 +547,10 @@ def patch_launch_file(launch_path, planning_horizon, is_static=False,
                               'true' if use_linf_feas else 'false')
 
     if is_static:
-        # Enlarge sensing range so the full point cloud is processed.
-        # The cloud callback uses local_update_range as a box filter.
-        content = set_arg_default(content, 'local_update_range_x', '50.0')
-        content = set_arg_default(content, 'local_update_range_y', '20.0')
-        content = set_arg_default(content, 'local_update_range_z', '6.0')
-        # Static obstacles don't move — don't fade occupied cells
+        # static_forest.py now simulates a real sensor (publishes only
+        # nearby obstacles within --sensing-range), so we keep the default
+        # local_update_range (10m) and just disable fading so that
+        # previously-seen cells persist.
         content = set_arg_default(content, 'fading_time', '10000.0')
 
     with open(launch_path, 'w') as f:
@@ -561,12 +559,13 @@ def patch_launch_file(launch_path, planning_horizon, is_static=False,
     norm_str = "L-inf" if use_linf_feas else "L2"
     print(f"  Patched launch file: planning_horizon={planning_horizon}, "
           f"use_linf_feas={use_linf_feas} ({norm_str})"
-          + (", static sensing (50m range, no fading)" if is_static else ""))
+          + (", static (no fading)" if is_static else ""))
 
 
 def launch_environment(num_obstacles, dynamic_ratio, seed, rviz=False,
                        weight_time=10.0, max_vel=5.0, static_world=None,
-                       planning_horizon=11.25, use_linf_feas=True):
+                       planning_horizon=7.5, use_linf_feas=True,
+                       obstacles_json_file=None):
     """Launch everything EXCEPT the planner (which makes the drone move).
 
     Returns list of subprocess handles.  The caller must start rosbag and
@@ -622,6 +621,8 @@ def launch_environment(num_obstacles, dynamic_ratio, seed, rviz=False,
             f" --dynamic-ratio {dynamic_ratio}"
             f" --seed {seed}"
         )
+        if obstacles_json_file:
+            forest_cmd += f" --obstacles-json {obstacles_json_file}"
         print("  Launching dynamic_forest...", flush=True)
     procs.append(run_cmd(forest_cmd))
     time.sleep(3)
@@ -648,7 +649,7 @@ def launch_planner():
 def run_trial(trial_id, num_obstacles, dynamic_ratio, seed,
               timeout=100.0, output_dir=None, rviz=False, weight_time=10.0,
               max_vel=5.0, static_world=None, planning_horizon=11.25,
-              use_linf_feas=True):
+              use_linf_feas=True, obstacles_json_file=None):
     """Run a single benchmark trial."""
 
     print("=" * 80, flush=True)
@@ -665,7 +666,8 @@ def run_trial(trial_id, num_obstacles, dynamic_ratio, seed,
                                    weight_time=weight_time, max_vel=max_vel,
                                    static_world=static_world,
                                    planning_horizon=planning_horizon,
-                                   use_linf_feas=use_linf_feas)
+                                   use_linf_feas=use_linf_feas,
+                                   obstacles_json_file=obstacles_json_file)
 
     # Init ROS node
     try:
@@ -686,11 +688,12 @@ def run_trial(trial_id, num_obstacles, dynamic_ratio, seed,
         '/drone_0_ego_planner_node/optimal_list',
         '/drone_0_odom_visualization/path',
         '/drone_0_ego_planner_node/grid_map/occupancy_inflate',
+        '/drone_0_odom_visualization/robot',
+        '/dynamic_forest/markers',
     ]
     if not static_world:
-        # Only record dynamic obstacle topics when there are dynamic obstacles
+        # Also record dynamic obstacle trajectory topic
         topics += [
-            '/dynamic_forest/markers',
             '/broadcast_traj_to_planner',
         ]
     rosbag_proc = start_rosbag(bag_path, topics)
@@ -817,6 +820,8 @@ def main():
     parser.add_argument('--num-obstacles', type=int, default=200)
     parser.add_argument('--dynamic-ratio', type=float, default=0.65)
     parser.add_argument('--seed-start', type=int, default=0)
+    parser.add_argument('--obstacles-json-dir', type=str, default=None,
+                        help='Directory with shared obstacle JSON configs')
     parser.add_argument('--timeout', type=float, default=100.0)
     parser.add_argument('--output-dir', type=str,
                         default='/home/kota/data_dynamic')
@@ -888,6 +893,16 @@ def main():
 
     for i in range(args.num_trials):
         seed = args.seed_start + i
+
+        # Resolve shared obstacle JSON file if provided
+        obs_json = None
+        if args.obstacles_json_dir:
+            obs_json = os.path.join(
+                args.obstacles_json_dir, f"obstacles_seed{seed}.json")
+            if not os.path.exists(obs_json):
+                print(f"WARNING: Obstacle JSON not found: {obs_json}")
+                obs_json = None
+
         print(f"\nStarting Trial {i+1}/{args.num_trials}", flush=True)
 
         try:
@@ -904,6 +919,7 @@ def main():
                 static_world=args.static_world or None,
                 planning_horizon=args.planning_horizon,
                 use_linf_feas=use_linf_feas,
+                obstacles_json_file=obs_json,
             )
             metrics_list.append(metrics)
 
